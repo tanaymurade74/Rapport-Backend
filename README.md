@@ -1,4 +1,4 @@
-# Anvaya CRM – Backend
+# Rapport  CRM – Backend
 
 A REST API for a Customer Relationship Management app. It powers lead tracking, sales agents, comments, tags, and pipeline reporting, built with Express, Node.js, and MongoDB.
 
