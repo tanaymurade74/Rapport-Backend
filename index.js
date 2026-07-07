@@ -30,7 +30,7 @@ initializeDatabase();
 const BACKEND_URL =
 "https://crm-backend-wlhu.vercel.app";
 const FRONTEND_URL =
-  "https://crm-frontend-9o5d.vercel.app";
+  "https://rapport-frontend-two.vercel.app";
 const REDIRECT_URI = `${BACKEND_URL}/auth/google/callback`;
 
 const verifyToken = (req, res, next) => {
@@ -93,9 +93,9 @@ app.get("/auth/google/callback", async (req, res) => {
 
     const email = profileResponse.data.email;
 
-    let user = await User.findOne({ email });
+    let user = await RapportUser.findOne({ email });
     if (!user) {
-      user = await User.create({ email });
+      user = await RapportUser.create({ email });
     }
 
     const jwtToken = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
