@@ -1,7 +1,12 @@
 const mongoose = require("mongoose");
 const express = require("express");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
+const axios = require("axios");
+require("dotenv").config();
+
 const app = express();
+app.set("trust proxy", 1);
 
 const corsOptions = {
   origin: "*",
@@ -16,10 +21,93 @@ const Lead = require("./models/lead.model.js");
 const SalesAgent = require("./models/salesAgent.model.js");
 const Comment = require("./models/comment.model.js");
 const Tag = require("./models/tag.model.js");
+const RapportUser = require("./models/rapportUser.model.js");
 
 const { initializeDatabase } = require("./db/db.connect.js");
 
 initializeDatabase();
+
+const BACKEND_URL =
+"https://crm-backend-wlhu.vercel.app";
+const FRONTEND_URL =
+  "https://crm-frontend-9o5d.vercel.app";
+const REDIRECT_URI = `${BACKEND_URL}/auth/google/callback`;
+
+const verifyToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader)
+    return res.status(401).json({ message: "No token provided" });
+
+  const token = authHeader.split(" ")[1];
+  if (!token) return res.status(401).json({ message: "No token provided" });
+
+  try {
+    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: "Invalid token" });
+  }
+};
+
+app.get("/auth/me", verifyToken, async (req, res) => {
+  res.json({ userId: req.user.userId });
+});
+
+app.get("/auth/login", async (req, res) => {
+  const googleUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${process.env.GOOGLE_CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=code&scope=profile email`;
+  res.redirect(googleUrl);
+});
+
+app.get("/auth/google/callback", async (req, res) => {
+  const { code } = req.query;
+  if (!code) {
+    return res.status(400).json({ message: "Authorization code not provided" });
+  }
+  try {
+    const googleTokenResponse = await axios.post(
+      "https://oauth2.googleapis.com/token",
+      new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        code,
+        redirect_uri: REDIRECT_URI,
+        grant_type: "authorization_code",
+      }),
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
+    );
+
+    const googleAccessToken = googleTokenResponse.data.access_token;
+
+    const profileResponse = await axios.get(
+      "https://www.googleapis.com/oauth2/v2/userinfo",
+      {
+        headers: {
+          Authorization: `Bearer ${googleAccessToken}`,
+        },
+      }
+    );
+
+    const email = profileResponse.data.email;
+
+    let user = await User.findOne({ email });
+    if (!user) {
+      user = await User.create({ email });
+    }
+
+    const jwtToken = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "12h",
+    });
+
+    res.redirect(`${FRONTEND_URL}/oauth-success?token=${jwtToken}`);
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ message: "Google authentication failed" });
+  }
+});
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -189,7 +277,7 @@ async function getByLeadName(name){
     }
 }
 
-app.delete("/comments/:commentId", async (req, res)=>{
+app.delete("/comments/:commentId", verifyToken, async (req, res)=>{
     try{
         const comment = await deleteComment(req.params.commentId);
         if(!comment){
@@ -201,7 +289,7 @@ app.delete("/comments/:commentId", async (req, res)=>{
     }
 })
 
-app.get("/leads/search/:searchTerm", async (req, res)=>{
+app.get("/leads/search/:searchTerm", verifyToken, async (req, res)=>{
     try{
         const param = req.params.searchTerm;
         const leadName = decodeURIComponent(param).trim().toLowerCase();
@@ -216,7 +304,7 @@ app.get("/leads/search/:searchTerm", async (req, res)=>{
     }
 })
 
-app.get("/report/last-week", async (req, res) => {
+app.get("/report/last-week", verifyToken, async (req, res) => {
   try {
     const leadsClosed = await leadsClosedLastWeek();
     if (leadsClosed.length === 0) {
@@ -239,7 +327,7 @@ app.get("/report/last-week", async (req, res) => {
   }
 });
 
-app.get("/report/pipeline", async (req, res) => {
+app.get("/report/pipeline", verifyToken, async (req, res) => {
   try {
     const count = await totalLeadsInPipeline();
     return res.status(200).json({ totalPipelineLeads: count });
@@ -250,7 +338,7 @@ app.get("/report/pipeline", async (req, res) => {
   }
 });
 
-app.get("/agents", async (req, res) => {
+app.get("/agents", verifyToken, async (req, res) => {
   try {
     const allAgents = await getAllSalesAgent();
     if (!allAgents) {
@@ -264,7 +352,7 @@ app.get("/agents", async (req, res) => {
   }
 });
 
-app.post("/agents", async (req, res) => {
+app.post("/agents", verifyToken, async (req, res) => {
   try {
     const { name, email } = req.body;
     if (!name || !email) {
@@ -285,7 +373,7 @@ app.post("/agents", async (req, res) => {
 });
 
 
-app.get("/agents/:id", async (req, res) => {
+app.get("/agents/:id", verifyToken, async (req, res) => {
     try{
         const agent = await getSalesAgentById(req.params.id);
         return res.status(200).json(agent);
@@ -294,7 +382,7 @@ app.get("/agents/:id", async (req, res) => {
     }
 })
 
-app.delete("/agents/:id", async (req, res)=>{
+app.delete("/agents/:id", verifyToken, async (req, res)=>{
     try{
         const deletedAgent = await deleteAgent(req.params.id);
         return res.status(200).json(deletedAgent);
@@ -303,7 +391,7 @@ app.delete("/agents/:id", async (req, res)=>{
     }
 })
 
-app.get("/leads", async (req, res) => {
+app.get("/leads", verifyToken, async (req, res) => {
   try {
     const { _id, salesAgent, status, tags, source } = req.query;
     const filter = {};
@@ -353,7 +441,7 @@ app.get("/leads", async (req, res) => {
   }
 });
 
-app.post("/leads", async (req, res) => {
+app.post("/leads", verifyToken, async (req, res) => {
   try {
     const { salesAgent, name, source, tags, priority, timeToClose } = req.body;
 
@@ -385,7 +473,7 @@ app.post("/leads", async (req, res) => {
   }
 });
 
-app.delete("/leads/:id", async (req, res) => {
+app.delete("/leads/:id", verifyToken, async (req, res) => {
   try {
     if (!isValidId(req.params.id)) {
       return res.status(400).json({ error: "Invalid Lead ID format." });
@@ -406,7 +494,7 @@ app.delete("/leads/:id", async (req, res) => {
   }
 });
 
-app.put("/leads/:id", async (req, res) => {
+app.put("/leads/:id", verifyToken, async (req, res) => {
   try {
     if (!isValidId(req.params.id)) {
       return res.status(400).json({ error: "Invalid Lead ID format." });
@@ -431,7 +519,7 @@ app.put("/leads/:id", async (req, res) => {
   }
 });
 
-app.post("/leads/:id/comments", async (req, res) => {
+app.post("/leads/:id/comments", verifyToken, async (req, res) => {
   try {
     const leadId = req.params.id;
     const { commentText, author } = req.body;
@@ -456,7 +544,7 @@ app.post("/leads/:id/comments", async (req, res) => {
   }
 });
 
-app.get("/leads/:id/comments", async (req, res) => {
+app.get("/leads/:id/comments", verifyToken, async (req, res) => {
   try {
     const leadId = req.params.id;
     const comments = await getCommentsForLead(leadId);
@@ -473,7 +561,7 @@ app.get("/leads/:id/comments", async (req, res) => {
   }
 });
 
-app.post("/tag", async (req, res) => {
+app.post("/tag", verifyToken, async (req, res) => {
   try {
     const tag = req.body;
     if (!tag.name) {
@@ -488,7 +576,7 @@ app.post("/tag", async (req, res) => {
   }
 });
 
-app.get("/tag", async (req, res) => {
+app.get("/tag", verifyToken, async (req, res) => {
   try {
     const tag = await getAllTags();
     if (tag.length === 0) {
