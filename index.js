@@ -23,6 +23,17 @@ const Comment = require("./models/comment.model.js");
 const Tag = require("./models/tag.model.js");
 const RapportUser = require("./models/rapportUser.model.js");
 
+let dbPromise = null;
+const connectDB =  () => {
+  if(mongoose.connection.readyState === 1){
+    return Promise.resolve();
+  }
+  if(!dbPromise){
+    dbPromise = mongoose.connect(process.env.MONGODB)
+  }
+  return dbPromise;
+}
+
 const { initializeDatabase } = require("./db/db.connect.js");
 
 initializeDatabase();
@@ -52,6 +63,9 @@ const verifyToken = (req, res, next) => {
 app.get("/auth/me", verifyToken, async (req, res) => {
   res.json({ userId: req.user.userId });
 });
+
+
+
 
 app.get("/auth/login", async (req, res) => {
   const googleUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${process.env.GOOGLE_CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=code&scope=profile email`;
@@ -92,7 +106,7 @@ app.get("/auth/google/callback", async (req, res) => {
     );
 
     const email = profileResponse.data.email;
-
+    await connectDB();
     let user = await RapportUser.findOne({ email });
     if (!user) {
       user = await RapportUser.create({ email });
