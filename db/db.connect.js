@@ -6,12 +6,12 @@ const mongoUri = process.env.MONGODB;
 
 const initializeDatabase = async () => {
   return mongoose
-    .connect(mongoUri)
-    .then(() => console.log("Connected to database"))
-    .catch((error) => {
-      console.log("Error while connecting to the database", error);
-      throw error;
-    });
+  .connect(mongoUri, { serverSelectionTimeoutMS: 15000 })
+  .then(() => console.log("Connected to database"))
+  .catch((error) => {
+    console.log("Error while connecting to the database", error);
+    throw error;
+  });
 };
 
 module.exports = { initializeDatabase };

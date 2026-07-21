@@ -43,7 +43,8 @@ app.use(async (req, res, next) => {
     await dbReady;
     next();
   } catch (e) {
-    res.status(503).json({ Error: "DB unavailable" });
+    dbReady = initializeDatabase();
+    res.status(503).json({ Error: "Starting up, please try again" });
   }
 });
 
