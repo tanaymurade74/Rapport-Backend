@@ -36,7 +36,16 @@ const connectDB =  () => {
 
 const { initializeDatabase } = require("./db/db.connect.js");
 
-initializeDatabase();
+const dbReady = initializeDatabase();
+
+app.use(async (req, res, next) => {
+  try {
+    await dbReady;
+    next();
+  } catch (e) {
+    res.status(503).json({ Error: "DB unavailable" });
+  }
+});
 
 const BACKEND_URL =
 "https://crm-backend-wlhu.vercel.app";
